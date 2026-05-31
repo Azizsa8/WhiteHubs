@@ -1,5 +1,5 @@
 #!/bin/bash
-# Simple test for the API endpoint
+# Simple test for the API endpoints
 
 echo "Starting API server in background..."
 python3 /root/WhiteHubs/src/api/app.py &
@@ -9,15 +9,42 @@ API_PID=$!
 sleep 3
 
 echo "Testing tab creation endpoint..."
-RESPONSE=$(curl -s -X POST http://localhost:5000/tabs   -H "Content-Type: application/json"   -d '{"userId":"test-user","sessionKey":"test-session","url":"https://example.com"}')
+CREATE_RESPONSE=$(curl -s -X POST http://localhost:5000/tabs   -H "Content-Type: application/json"   -d '{"userId":"test-user","sessionKey":"test-session","url":"https://example.com"}')
 
-echo "Response: $RESPONSE"
+echo "Create Response: $CREATE_RESPONSE"
 
-# Check if response contains expected fields
-if echo "$RESPONSE" | grep -q '"tabId"' && echo "$RESPONSE" | grep -q '"url"'; then
-    echo "✓ Tab creation endpoint working correctly"
+# Extract tabId from response
+TAB_ID=$(echo "$CREATE_RESPONSE" | grep -o '"tabId":"[^"]*"' | cut -d'"' -f4)
+
+if [ -z "$TAB_ID" ]; then
+    echo "✗ Failed to create tab or extract tabId"
+    kill $API_PID 2>/dev/null
+    wait $API_PID 2>/dev/null
+    exit 1
+fi
+
+echo "Created tab with ID: $TAB_ID"
+
+echo "Testing tab navigation endpoint..."
+NAVIGATE_RESPONSE=$(curl -s -X POST http://localhost:5000/tabs/$TAB_ID/navigate   -H "Content-Type: application/json"   -d '{"userId":"test-user","url":"https://google.com"}')
+
+echo "Navigate Response: $NAVIGATE_RESPONSE"
+
+if echo "$NAVIGATE_RESPONSE" | grep -q '"status":"loaded"'; then
+    echo "✓ Tab navigation endpoint working correctly"
 else
-    echo "✗ Tab creation endpoint not working as expected"
+    echo "✗ Tab navigation endpoint not working as expected"
+fi
+
+echo "Testing tab snapshot endpoint..."
+SNAPSHOT_RESPONSE=$(curl -s "http://localhost:5000/tabs/$TAB_ID/snapshot?userId=test-user")
+
+echo "Snapshot Response: $SNAPSHOT_RESPONSE"
+
+if echo "$SNAPSHOT_RESPONSE" | grep -q '"snapshot"'; then
+    echo "✓ Tab snapshot endpoint working correctly"
+else
+    echo "✗ Tab snapshot endpoint not working as expected"
 fi
 
 # Clean up
